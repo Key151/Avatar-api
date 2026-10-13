@@ -1,3 +1,5 @@
 .venv/
 __pycache__/
 *.pyc
+cache_traducoes/
+db.sqlite3

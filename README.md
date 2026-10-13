@@ -5,9 +5,9 @@ Uma API REST construída com Python e framework Django que pega os dados do "htt
 Projeto desenvolvido durante a trilha 7 Days of Code da Alura, onde construímos uma API do zero guiando um agente de IA como parceiro de programação.
 
 ## Como rodar localmente
-Abrir o *Avatar-api\start.bat*   
+Abrir o **Avatar-api\start.bat**   
 
-Obs: Não feche CMD que for aberto
+*Obs: Na primeira vez que abrir o site pode demorar um pouco para carregar e não feche CMD que for aberto*
 
 ## Tecnologias
 - Python 3.11+

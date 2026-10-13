@@ -7,54 +7,74 @@ import requests
 from deep_translator import GoogleTranslator, MyMemoryTranslator
 from django.shortcuts import render
 
-API_URL = "https://last-airbender-api.fly.dev/api/v1/characters"
-LIMITE = 10  # quantos personagens vamos traduzir por página
+API = "https://last-airbender-api.fly.dev/api/v1/characters"
+POR_PAGINA = 20      # a API devolve 20 personagens por página
+TOTAL_PAGINAS = 25   # a API tem 497 personagens no total
 
 
 @lru_cache(maxsize=1024)
 def traduzir(texto):
-    """Traduz um texto para o português (Google, com reserva no MyMemory).
+    """Traduz para português. O cache evita traduzir o mesmo texto duas vezes.
 
-    O cache evita traduzir o mesmo texto de novo em próximas cargas da página.
+    Se os dois tradutores falharem, devolve o texto original em vez de quebrar.
     """
     if not texto or not texto.strip():
         return ""
     try:
         return GoogleTranslator(source="auto", target="pt").translate(texto)
     except Exception:
+        pass
+    try:
         return MyMemoryTranslator(source="en-US", target="pt-BR").translate(texto)
+    except Exception:
+        return texto
 
 
-def traduzir_lista(itens):
-    """Traduz cada item de uma lista e junta com vírgula."""
-    return ", ".join(traduzir(item) for item in itens)
+def traduzir_em_paralelo(personagens_api):
+    """Pega todos os textos dos personagens e traduz vários ao mesmo tempo."""
+    textos = set()
+    for p in personagens_api:
+        textos.update([p["name"], p.get("affiliation", "")])
+        textos.update(p.get("allies", []))
+        textos.update(p.get("enemies", []))
+
+    com_texto = [t for t in textos if t and t.strip()]
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        list(executor.map(traduzir, com_texto))
+
+
+def pagina_na_url(request):
+    """Lê o número da página na URL (ex: /?pagina=3), com segurança."""
+    try:
+        pagina = int(request.GET.get("pagina", 1))
+    except ValueError:
+        pagina = 1
+    return max(1, min(pagina, TOTAL_PAGINAS))
 
 
 def lista_personagens(request):
-    """Busca os personagens na API, traduz e mostra na página."""
-    resposta = requests.get(API_URL, timeout=10)
-    personagens_api = resposta.json()[:LIMITE]
+    pagina = pagina_na_url(request)
 
-    # Reúne todos os textos únicos e traduz vários ao mesmo tempo
-    textos = set()
-    for item in personagens_api:
-        textos.add(item["name"])
-        textos.add(item.get("affiliation", ""))
-        textos.update(item.get("allies", []))
-        textos.update(item.get("enemies", []))
+    personagens_api = requests.get(API, params={"page": pagina}, timeout=10).json()
+    traduzir_em_paralelo(personagens_api)
 
-    textos_para_traduzir = [t for t in textos if t and t.strip()]
-    with ThreadPoolExecutor(max_workers=8) as executor:
-        list(executor.map(traduzir, textos_para_traduzir))
+    personagens = [{
+        "nome": traduzir(p["name"]),
+        "afiliacao": traduzir(p.get("affiliation", "")),
+        "aliados": ", ".join(traduzir(a) for a in p.get("allies", [])),
+        "inimigos": ", ".join(traduzir(e) for e in p.get("enemies", [])),
+        "foto": p.get("photoUrl") or "",
+    } for p in personagens_api]
 
-    personagens = []
-    for item in personagens_api:
-        personagens.append({
-            "nome": traduzir(item["name"]),
-            "afiliacao": traduzir(item.get("affiliation", "")),
-            "aliados": traduzir_lista(item.get("allies", [])),
-            "inimigos": traduzir_lista(item.get("enemies", [])),
-            "foto": item.get("photoUrl", ""),
-        })
+    # Janela de 5 páginas ao redor da atual para o menu de paginação
+    paginas = range(max(1, pagina - 2), min(TOTAL_PAGINAS, pagina + 2) + 1)
 
-    return render(request, "personagens/lista.html", {"personagens": personagens})
+    return render(request, "personagens/lista.html", {
+        "personagens": personagens,
+        "pagina": pagina,
+        "total_paginas": TOTAL_PAGINAS,
+        "paginas": paginas,
+        "tem_anterior": pagina > 1,
+        "tem_proxima": pagina < TOTAL_PAGINAS,
+        "offset": (pagina - 1) * POR_PAGINA,
+    })

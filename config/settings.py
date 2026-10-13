@@ -25,7 +25,15 @@ SECRET_KEY = 'django-insecure-37m5gp!ho4npmq63yct1d(s(0^j5pis=7nfa($egl5trgm_6kf
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ["127.0.0.1", "localhost", "192.168.15.8"]
+
+# Cache de traduções em arquivo: sobrevive ao reiniciar o servidor
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.filebased.FileBasedCache",
+        "LOCATION": BASE_DIR / "cache_traducoes",
+    }
+}
 
 
 # Application definition
